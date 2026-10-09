@@ -32,9 +32,9 @@ downstream reads it. Full definition: `references/tiers.md`.
   not yet build a compliant production environment, so this path currently ends at an approved plan
   and a gap list.
 
-Some rules allow no departure in either tier (no direct Owner or Contributor assignment, no stored
-cloud credential, no secrets in the repository, no public IPs, and the rest of class A in
-`tiers.md`).
+Some rules allow no departure in either tier (no Owner, no stored cloud credential, no secrets in the
+repository, no public IPs, and the rest of class A in `tiers.md`). A direct Contributor assignment to
+the pipeline's managed identity is a sandbox departure with limits, and never allowed in production.
 
 ## Rules
 

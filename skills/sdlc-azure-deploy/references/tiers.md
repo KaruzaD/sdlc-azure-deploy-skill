@@ -54,7 +54,8 @@ becomes a Public Cloud Service Request. Never a workaround, and never disabling 
   inbound 22 or 3389 from the internet.
 - R18: HTTPS only, TLS 1.2 or later.
 - R24: do not delete the `setbypolicy` diagnostic setting.
-- R27: no direct Owner or Contributor assignment at any scope; never grant Owner.
+- R27, in part: never grant Owner, and never assign a privileged role to anyone but the pipeline's own
+  managed identity. In production R27 has no departure at all (below).
 - R31: OIDC through `azure/login`; no stored cloud credential, no personal access token.
 - From this skill: no secret in the repository, a file the agent reads, or the conversation; no real
   personal information in a sandbox; approvals by a human.
@@ -73,6 +74,19 @@ production, any of these is a blocker.
 - R25: the preference order for workload authentication where a higher one is available.
 - R32: self-hosted runners inside the network for jobs that reach private data services.
 - R3: tags, where the design would fight inheritance.
+- R27: a direct Contributor assignment (the rule says privileged roles come only through
+  `DO_PuC_Azure_Live_{plate}_{Role}` group membership). Sandbox may assign Contributor directly to the
+  pipeline's managed identity, and only that, with these limits:
+  - Contributor only, never Owner, never to a person or any other identity.
+  - Scope: the environment's resource group, pre-created in the bootstrap. Subscription scope is a
+    separate, wider departure: list what else lives in the subscription (other groups, an existing
+    SRE agent) and have the human approve that line by name.
+  - Contributor cannot create role assignments, so the agent's read-only roles are still created by a
+    person in the bootstrap, or by a conditioned User Access Administrator.
+  - It is attempted, not assumed. If the landing zone denies it, the entry becomes `denied-by-policy`
+    and the design falls back to non-privileged roles on the resource group (`bootstrap.md`).
+  - `productionNeeds`: non-privileged or custom roles at the resource group, or platform-owned group
+    membership.
 
 ### Class C: additions required for production
 
@@ -113,7 +127,7 @@ Never extend an approved entry to another resource without a new approval.
 | 2 Plan | Add a "Rule compliance" table and a "Deviations" section | The same table; every row must be compliant or not applicable. A departure is listed as a blocker with the request or exception that would clear it. |
 | 3 Gate | Human approves the plan and each deviation | A plan with a departure cannot be approved. A human approves the compliance table and the gap list. |
 | 4 Apply | Class B departures attempted; the canary records denials | Only what has a compliant template; see below |
-| 5 Bootstrap | Roles still avoid Class A; secrets in GitHub environment secrets are a deviation | Non-privileged roles at the narrowest scope, a pre-created resource group, and platform-owned group membership where privileged |
+| 5 Bootstrap | Owner is never assigned. A direct Contributor for the pipeline identity is a recorded R27 deviation; secrets held as GitHub environment secrets are an R21/R26 deviation | Non-privileged roles at the narrowest scope, a pre-created resource group, and platform-owned group membership where a privileged role is needed |
 | 6 Workflow | Manual or any trigger the user picks | Environment with required reviewers; protected-branch trigger only; self-hosted runner where private data services are touched |
 | 7 Verify | As in `verification.md` | The same, plus each Class C item |
 | 8 Hand off | README lists deviations and what production needs | README lists the compliance evidence and what remains |

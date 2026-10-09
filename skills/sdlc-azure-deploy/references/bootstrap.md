@@ -41,12 +41,19 @@ the resource group and resources, the right to create the agent's three read-onl
 (restricted by condition to those three role IDs, so a compromised pipeline cannot grant itself
 more), and, when attaching, read access to the agent and write access to it.
 
-`landing-zone-bcgov.md` says direct Owner or Contributor assignment is denied and that the
-golden example's subscription-wide Contributor is untested against that. R27 is class A, so this
-holds in both tiers. Resolve it with the user before running `roles`: a pre-created resource group
-with non-privileged roles at its scope, a custom role, or a request to the platform team. In
-production the roles are always non-privileged, at the narrowest scope, with any privileged one
-carried by platform-owned group membership.
+`landing-zone-bcgov.md` says direct Owner or Contributor assignment is denied (R27). The deployments
+so far ran under the user's own group-derived Owner, so a direct Contributor for the pipeline identity
+has not been tried.
+
+- **Sandbox:** Contributor to the pipeline identity is an allowed, recorded departure, limited as in
+  `tiers.md`: Contributor only, only that identity, on the environment's resource group by default.
+  A subscription-wide assignment needs its own approval after you list what else the subscription
+  holds. Attempt it. If the assignment is denied, mark the deviation `denied-by-policy` and fall back
+  to the production approach below.
+- **Production:** no departure. Pre-create the resource group, deploy at its scope, and give the
+  identity non-privileged roles at the narrowest scope, with any privileged role carried by
+  platform-owned group membership. Built-in roles cover most of a Container Apps deployment, but
+  there is none for PostgreSQL Flexible Server, so expect a custom role.
 
 Three role definition IDs for the agent: Reader `acdd72a7-3385-48ef-bd42-f606fba81ae7`, Monitoring
 Reader `43d0d8ad-25c7-4714-9337-8ba259a9fe05`, Log Analytics Reader

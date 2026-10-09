@@ -28,14 +28,14 @@ subscription can differ.
 The first deployment worked, but a stricter subscription may deny these. How each is treated
 depends on the tier (`tiers.md`). In sandbox a class B departure is recorded in the deviation
 register, approved, and tried; the canary shows which are denied where you are deploying. In
-production any of them blocks approval. R27 is class A: no tier may depart from it.
+production any of them blocks approval.
 
 | Rule | Class | What the example did | What to do instead, or ask |
 | --- | --- | --- | --- |
 | R14: Application Gateway is the only supported way to expose an app to the internet | B | Public Container Apps default domain, no gateway (the requester's choice) | Sandbox: record it, and ask whether the platform accepts it. Production: an Application Gateway, not built yet. |
 | R19: PaaS created with public network access disabled | B | Public Postgres with the Azure-services firewall rule | Private endpoint needs a VNet-integrated environment on a landing-zone subnet (R4, R6, R13). Not built yet. |
 | R21, R26: secrets in Key Vault only; none in pipeline variables | B | Container App secrets, and a Postgres password held as a GitHub environment secret | Key Vault with RBAC, and a managed identity to read it. Better still, Entra authentication to the database so there is no password. The app may need a code change. Not built yet. |
-| R27: no direct Owner or Contributor assignment at any scope | A | The bootstrap assigns Contributor on the subscription directly to the pipeline identity. Not tested against R27. | Pre-create the resource group, deploy at its scope, and give the identity non-privileged roles, or a custom role. Or ask the platform team to add the identity to the group that carries the role. Not decided. This must change in both tiers. |
+| R27: no direct Owner or Contributor assignment at any scope | B | The bootstrap assigns Contributor on the subscription directly to the pipeline identity. Not tested against R27: the deployments so far ran under the user's own group-derived Owner. | Sandbox: Contributor to the pipeline identity, limited as in `tiers.md` (resource group scope by default). If the landing zone denies it, pre-create the resource group and use non-privileged roles at its scope, or ask the platform team to add the identity to the group that carries the role. Production: not allowed. |
 
 A project may carry approved deviations. Record them with the rule number, the resource and the
 approval, so a later review flags only new ones. Never extend one to more resources without a new
