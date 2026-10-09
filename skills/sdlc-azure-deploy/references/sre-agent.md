@@ -49,7 +49,8 @@ here and in the state file's `verifiedFacts`.
 - **Create or attach.** Attach reuses an agent that already holds history and settings; create gives
   a clean agent per environment but costs agent units and needs S1 first.
 - **Run mode.** `Review` keeps writes behind a human approval and is the default. `ReadOnly` is
-  stricter. `Autonomous` lets it act on its own; do not offer it unless asked.
+  stricter. `Autonomous` lets it act on its own; do not offer it unless asked, and never in
+  production.
 - **Where it lives.** An attached agent stays in its own resource group. A created one goes in the
   environment's resource group, which makes it a resource of the thing it watches; ask whether to
   separate them.

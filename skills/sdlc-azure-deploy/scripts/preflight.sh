@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Read-only checks before any planning or bootstrapping. Prints OK, WARN or FAIL per line and exits
 # non-zero on FAIL. It changes nothing in Azure or GitHub.
-#   preflight.sh [--subscription ID] [--location canadacentral] [--repo owner/name]
+#   preflight.sh [--tier sandbox|production] [--subscription ID] [--location canadacentral] [--repo owner/name]
 set -uo pipefail
 
 SUB=""
 LOCATION=canadacentral
 REPO=""
+TIER=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --tier) TIER=$2; shift 2 ;;
     --subscription) SUB=$2; shift 2 ;;
     --location) LOCATION=$2; shift 2 ;;
     --repo) REPO=$2; shift 2 ;;
@@ -32,6 +34,25 @@ fi
 [ -z "$SUB" ] && SUB=$(az account show --query id -o tsv)
 az account set --subscription "$SUB" > /dev/null 2>&1 || { fail "subscription" "cannot select $SUB"; exit 1; }
 ok "subscription" "$(az account show --query '{n:name,id:id,tenant:tenantId}' -o tsv | tr '\t' ' ')"
+
+# BC Gov subscriptions are named <licence plate>-<env>; a heuristic, not proof.
+sub_name=$(az account show --query name -o tsv)
+case "$TIER" in
+  sandbox)
+    if echo "$sub_name" | grep -qi -E -- '-prod([^a-z]|$)'; then
+      fail "tier" "sandbox tier against a subscription named like production ($sub_name); do not continue"
+    else
+      ok "tier" "sandbox"
+    fi ;;
+  production)
+    if echo "$sub_name" | grep -qi -E -- '-prod([^a-z]|$)'; then
+      ok "tier" "production"
+    else
+      warn "tier" "production tier but the subscription is not named like production ($sub_name); confirm with the user"
+    fi ;;
+  "") warn "tier" "not given; ask the tier question first (references/tiers.md) and pass --tier" ;;
+  *) fail "tier" "unknown tier '$TIER'; use sandbox or production" ;;
+esac
 
 case "$LOCATION" in
   canadacentral|canadaeast) ok "location" "$LOCATION" ;;

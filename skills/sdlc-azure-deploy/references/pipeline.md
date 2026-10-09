@@ -24,6 +24,10 @@ third-party actions on a commit SHA, a pinned runner, `set -euo pipefail`, no st
 
 ## Shape decisions
 
+- **Tier.** Sandbox: any trigger the user picks. Production: the GitHub environment must have required
+  reviewers, the trigger must be limited to a protected branch (never an unreviewed manual run), and
+  a job that reaches a private data service needs a self-hosted runner inside the network (R32). The
+  hosted-runner template does not cover that; see `tiers.md`.
 - **Two passes.** Keep foundation, images, apps only if a build-time value depends on infrastructure
   (`buildTime[].dependsOnInfra` in the inventory). Otherwise build images first and deploy once;
   delete the foundation job and its outputs.

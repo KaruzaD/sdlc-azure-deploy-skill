@@ -19,7 +19,8 @@ In the BC Gov tenant it is a My Service Centre request, never self-service.
 
 ## Interview
 
-Ask one topic at a time and explain the consequence. Record answers in the state file.
+The tier is already recorded (`tiers.md`); do not ask again. Ask one topic at a time and explain the
+consequence. Record answers in the state file.
 
 1. Subscription. Show the ones preflight found; do not assume.
 2. Location: `canadacentral` (default; networking exists only there) or `canadaeast`.
@@ -41,9 +42,11 @@ the resource group and resources, the right to create the agent's three read-onl
 more), and, when attaching, read access to the agent and write access to it.
 
 `landing-zone-bcgov.md` says direct Owner or Contributor assignment is denied and that the
-golden example's subscription-wide Contributor is untested against that. Resolve it with the user
-before running `roles`: a pre-created resource group with non-privileged roles at its scope, a custom
-role, or a request to the platform team.
+golden example's subscription-wide Contributor is untested against that. R27 is class A, so this
+holds in both tiers. Resolve it with the user before running `roles`: a pre-created resource group
+with non-privileged roles at its scope, a custom role, or a request to the platform team. In
+production the roles are always non-privileged, at the narrowest scope, with any privileged one
+carried by platform-owned group membership.
 
 Three role definition IDs for the agent: Reader `acdd72a7-3385-48ef-bd42-f606fba81ae7`, Monitoring
 Reader `43d0d8ad-25c7-4714-9337-8ba259a9fe05`, Log Analytics Reader
@@ -57,9 +60,10 @@ assignment to them is in `examples/digital-marketplace-next/README.md`.
 3. If the user has all the rights: run `all` once they say so.
 4. If not: run `identity`, then hand `roles` to the person with the rights, with `bootstrap.env`,
    the dry-run output and a plain statement of what each role is for. Wait. Resume with `github`.
-5. Generated secrets are piped straight into GitHub and never shown. If a person needs a value (a
-   shared password for synthetic test users), ask whether to write it to a local file with mode 600
-   outside the repository; never print it.
+5. Generated secrets are piped straight into GitHub and never shown. In sandbox, a secret held as a
+   GitHub environment secret is a recorded R21/R26 deviation; in production it is not allowed. If a
+   person needs a value (a shared password for synthetic test users), ask whether to write it to a
+   local file with mode 600 outside the repository; never print it.
 6. Verify by listing what exists (`az identity federated-credential list`, `az role assignment
    list --assignee`, `gh variable list --env`, `gh secret list --env`) and record the IDs.
 

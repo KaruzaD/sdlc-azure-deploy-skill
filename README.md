@@ -4,10 +4,13 @@ An agent skill that takes a containerised repository from "ready to deploy" to a
 deployment on Azure Container Apps in a BC Gov landing zone, connected to an Azure SRE Agent, with a
 GitHub Actions pipeline that repeats it. It works with both Claude Code and GitHub Copilot in VS Code.
 
-The agent scans the repo, plans the resources and code changes, has the plan checked and approved by
-a human, applies the changes on a branch, walks the user through the one-time Azure and GitHub
-bootstrap, generates a hardened OIDC deploy workflow, then deploys and verifies. The rules and phases
-are in [skills/sdlc-azure-deploy/SKILL.md](skills/sdlc-azure-deploy/SKILL.md).
+The agent first asks whether the environment is a **sandbox** (development and test, synthetic data
+only, rule departures allowed if recorded and approved) or **production** (the BC Gov rules are
+binding). Then it scans the repo, plans the resources and code changes, has the plan checked and
+approved by a human, applies the changes on a branch, walks the user through the one-time Azure and
+GitHub bootstrap, generates a hardened OIDC deploy workflow, then deploys and verifies. The rules
+and phases are in [skills/sdlc-azure-deploy/SKILL.md](skills/sdlc-azure-deploy/SKILL.md), and the
+tiers in [references/tiers.md](skills/sdlc-azure-deploy/references/tiers.md).
 
 ## Install
 
@@ -41,6 +44,10 @@ Run `skills/sdlc-azure-deploy/scripts/preflight.sh` to check.
 Version 0.1: structure, rules, templates and the read-only and dry-run tooling. Nothing here has been
 run end to end by an agent on a second repository.
 
+**Tiers.** The sandbox path is what the templates build. The production path runs phases 0 to 3
+(tier, scan, plan with a rule compliance table, verification and approval) and then stops with a gap
+list, because no compliant production templates exist yet.
+
 Verified: the Bicep templates compile; the bootstrap script's dry run; the preflight script against a
 real subscription; the golden inventory against its schema.
 
@@ -59,8 +66,10 @@ Not verified, and called out where it matters:
 ## Not built yet
 
 A deterministic scanner script (the scan is done by the agent for now), a plan verifier script, an
-evaluation harness over several sample repositories, the Key Vault and private-network designs, and
-support for any compute but Container Apps.
+evaluation harness over several sample repositories, support for any compute but Container Apps, and
+the production templates: a landing-zone-integrated environment, private endpoints, Application
+Gateway with WAF, Key Vault with secret references, Entra authentication to the database, and a
+self-hosted runner pipeline.
 
 ## Checks
 

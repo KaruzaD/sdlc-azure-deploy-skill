@@ -17,6 +17,10 @@ Two uses: checking the plan before approval (phase 3) and checking the deploymen
 7. `az deployment sub what-if` (or `validate`) runs against the subscription. A pass does not mean the
    policy will accept it; see the canary.
 8. The pipeline would run with the roles and scopes the plan lists, and none more.
+9. The tier is recorded. The plan has a rule compliance table covering every class A and class B
+   rule that applies. In sandbox every departure is in the deviation register with a
+   `productionNeeds` entry and no class A rule is listed as a departure. In production there is no
+   departure at all, and every missing template is on the gap list.
 
 ### Independent verifier
 

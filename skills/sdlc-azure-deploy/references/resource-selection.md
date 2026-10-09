@@ -1,5 +1,9 @@
 # From inventory to resources
 
+These rows describe a **sandbox**. For production, each row that departs from a class B rule (public
+PaaS access, secrets outside Key Vault, no Application Gateway) has no compliant template yet:
+see "Production path today" in `tiers.md`.
+
 Every row says what an inventory finding requires. A resource with no finding behind it has no place
 in the plan.
 

@@ -3,35 +3,132 @@
   "title": "Deployment state",
   "description": "Kept at .azure-deploy/state.json in the target repository and committed. It makes the process resumable and records what was decided and by whom. It never holds a secret.",
   "type": "object",
-  "required": ["schemaVersion", "phase", "answers"],
+  "required": [
+    "schemaVersion",
+    "phase",
+    "answers"
+  ],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": {
+      "const": 1
+    },
     "phase": {
-      "enum": ["preflight", "scan", "plan", "verify", "approved", "applied", "bootstrapped", "workflow", "deployed", "verified", "handed-off"]
+      "enum": [
+        "preflight",
+        "scan",
+        "plan",
+        "verify",
+        "approved",
+        "applied",
+        "bootstrapped",
+        "workflow",
+        "deployed",
+        "verified",
+        "handed-off"
+      ]
     },
     "answers": {
       "type": "object",
       "properties": {
-        "subscriptionId": { "type": "string" },
-        "tenantId": { "type": "string" },
-        "location": { "enum": ["canadacentral", "canadaeast"] },
-        "environmentName": { "type": "string", "maxLength": 12 },
-        "bootstrapResourceGroup": { "type": "string" },
-        "identityName": { "type": "string" },
-        "githubRepo": { "type": "string" },
-        "githubEnvironment": { "type": "string" },
-        "imageRegistry": { "enum": ["ghcr-public", "ghcr-private", "acr"] },
-        "trigger": { "enum": ["manual", "push-main", "workflow-run", "tag"] },
-        "sreAgent": {
+        "tier": {
+          "enum": [
+            "sandbox",
+            "production"
+          ],
+          "description": "Asked in phase 0, before the scan. sandbox: development and test, synthetic data only, rule departures allowed if recorded. production: the BC Gov rules are binding and a departure blocks approval. See references/tiers.md."
+        },
+        "productionEvidence": {
           "type": "object",
-          "required": ["mode"],
+          "description": "Only for the production tier: references the user supplied. The skill records them and does not judge them.",
           "properties": {
-            "mode": { "enum": ["none", "attach", "create"] },
-            "resourceId": { "type": "string", "description": "For attach." },
-            "runMode": { "enum": ["ReadOnly", "Review", "Autonomous"], "default": "Review" }
+            "privacyAssessment": {
+              "type": "string"
+            },
+            "securityAssessment": {
+              "type": "string"
+            },
+            "changeProcess": {
+              "type": "string"
+            }
           }
         },
-        "bootstrapMode": { "enum": ["run-here", "hand-off"], "description": "run-here: the user has the rights. hand-off: someone else runs the roles step." }
+        "subscriptionId": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        },
+        "location": {
+          "enum": [
+            "canadacentral",
+            "canadaeast"
+          ]
+        },
+        "environmentName": {
+          "type": "string",
+          "maxLength": 12
+        },
+        "bootstrapResourceGroup": {
+          "type": "string"
+        },
+        "identityName": {
+          "type": "string"
+        },
+        "githubRepo": {
+          "type": "string"
+        },
+        "githubEnvironment": {
+          "type": "string"
+        },
+        "imageRegistry": {
+          "enum": [
+            "ghcr-public",
+            "ghcr-private",
+            "acr"
+          ]
+        },
+        "trigger": {
+          "enum": [
+            "manual",
+            "push-main",
+            "workflow-run",
+            "tag"
+          ]
+        },
+        "sreAgent": {
+          "type": "object",
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "enum": [
+                "none",
+                "attach",
+                "create"
+              ]
+            },
+            "resourceId": {
+              "type": "string",
+              "description": "For attach."
+            },
+            "runMode": {
+              "enum": [
+                "ReadOnly",
+                "Review",
+                "Autonomous"
+              ],
+              "default": "Review"
+            }
+          }
+        },
+        "bootstrapMode": {
+          "enum": [
+            "run-here",
+            "hand-off"
+          ],
+          "description": "run-here: the user has the rights. hand-off: someone else runs the roles step."
+        }
       }
     },
     "approvals": {
@@ -39,25 +136,106 @@
       "properties": {
         "plan": {
           "type": "object",
-          "required": ["by", "at", "planSha256"],
-          "properties": { "by": { "type": "string" }, "at": { "type": "string", "format": "date-time" }, "planSha256": { "type": "string" } }
+          "required": [
+            "by",
+            "at",
+            "planSha256"
+          ],
+          "properties": {
+            "by": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "planSha256": {
+              "type": "string"
+            }
+          }
         }
       }
     },
     "resources": {
       "type": "object",
       "description": "IDs and URLs recorded after they exist.",
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": {
+        "type": "string"
+      }
     },
     "verifiedFacts": {
       "type": "array",
       "description": "Preview-API behaviour confirmed against this tenant, with the date, so it is re-checked when stale.",
       "items": {
         "type": "object",
-        "required": ["fact", "checkedAt"],
-        "properties": { "fact": { "type": "string" }, "checkedAt": { "type": "string", "format": "date" } }
+        "required": [
+          "fact",
+          "checkedAt"
+        ],
+        "properties": {
+          "fact": {
+            "type": "string"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date"
+          }
+        }
       }
     },
-    "openItems": { "type": "array", "items": { "type": "string" } }
+    "openItems": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "deviations": {
+      "type": "array",
+      "description": "Departures from the BC Gov rules. Sandbox tier only; in production any entry blocks approval.",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule",
+          "what",
+          "reason",
+          "status",
+          "productionNeeds"
+        ],
+        "properties": {
+          "rule": {
+            "type": "string",
+            "description": "The rule number, for example R19."
+          },
+          "what": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "productionNeeds": {
+            "type": "string",
+            "description": "What replaces it before this could be production."
+          },
+          "status": {
+            "enum": [
+              "proposed",
+              "approved",
+              "denied-by-policy",
+              "resolved"
+            ]
+          },
+          "approvedBy": {
+            "type": "string"
+          },
+          "approvedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
   }
 }

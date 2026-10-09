@@ -1,6 +1,6 @@
 ---
 name: sdlc-azure-deploy
-description: 'Takes a containerised repository from "ready to deploy" to a verified deployment on Azure Container Apps in a BC Gov landing zone, wired to an Azure SRE Agent. Scans the repo, plans resources and code changes, has the plan verified and approved by a human, applies the changes on a branch, guides the one-time Azure and GitHub bootstrap, generates a hardened OIDC GitHub Actions deploy workflow, then deploys and checks it. Use when asked to deploy a project to Azure, set up an Azure dev or test environment, connect or create an SRE agent for an app, or add an Azure deploy pipeline. Not for other clouds, OpenShift, or production.'
+description: 'Takes a containerised repository from "ready to deploy" to a verified deployment on Azure Container Apps in a BC Gov landing zone, wired to an Azure SRE Agent. Asks first whether it is a sandbox (dev and test, rule departures allowed if recorded) or production (BC Gov rules binding). Scans the repo, plans resources and code changes, has the plan verified and approved by a human, applies the changes on a branch, guides the one-time Azure and GitHub bootstrap, generates a hardened OIDC GitHub Actions deploy workflow, then deploys and checks it. Use when asked to deploy a project to Azure, set up an Azure dev or test environment, connect or create an SRE agent for an app, or add an Azure deploy pipeline. Production currently stops at an approved plan and a gap list. Not for other clouds or OpenShift.'
 ---
 
 # Deploy a repository to Azure Container Apps with an SRE agent
@@ -12,13 +12,29 @@ is in `references/`.
 
 ## Scope
 
-- In: Azure Container Apps, one dev or test environment, BC Gov landing zone profile, GitHub Actions,
-  an SRE agent created or attached.
-- Out: production, other clouds, App Service, Functions, Static Web Apps, OpenShift. Say so and stop
-  if the user asks for one.
+- In: Azure Container Apps, BC Gov landing zone profile, GitHub Actions, an SRE agent created or
+  attached, on one of two tiers (below).
+- Out: other clouds, App Service, Functions, Static Web Apps, OpenShift. Say so and stop if the user
+  asks for one.
 - Read `references/landing-zone-bcgov.md` before planning, and the `bcgov-azure` skill's
   `CONVENTIONS.md` if it is installed. Where they disagree with a template, the rules win and the
   template changes.
+
+## Tiers
+
+Ask which tier first, in phase 0, before the scan, and record it in the state file. Everything
+downstream reads it. Full definition: `references/tiers.md`.
+
+- **Sandbox**: development and test, synthetic data only. A departure from a BC Gov rule in the
+  "departures allowed" class is permitted if it is recorded in the deviation register and a human
+  approves it. The landing zone's policy still decides, and the canary shows what it denies.
+- **Production**: the BC Gov rules are binding. A departure blocks approval. The templates here do
+  not yet build a compliant production environment, so this path currently ends at an approved plan
+  and a gap list.
+
+Some rules allow no departure in either tier (no direct Owner or Contributor assignment, no stored
+cloud credential, no secrets in the repository, no public IPs, and the rest of class A in
+`tiers.md`).
 
 ## Rules
 
@@ -39,8 +55,9 @@ These hold in every phase. Do not trade them for speed.
    draft the proposal and leave the decision to the owner.
 5. **Least privilege, in code.** Narrowest scope, narrowest role, a condition where one can limit a
    role-assignment right. Never Owner. Never grant yourself more than the plan lists.
-6. **Synthetic data only.** Ask what data the environment will hold. If it could be real personal
-   information, stop: that needs a privacy assessment, not this skill.
+6. **Know the data.** Sandbox holds synthetic data only: ask what it will hold, and if it could be
+   real personal information, stop. Production needs the user's privacy and security assessment
+   references, which you record and cannot supply.
 7. **Evidence over assertion.** Every claim in an inventory or plan cites a file and line, a command's
    output, or a document. Say "unknown" when you do not know.
 8. **Preview APIs are re-checked.** The SRE agent API is a preview. Treat what the references say as
@@ -50,6 +67,9 @@ These hold in every phase. Do not trade them for speed.
    what validation accepted. Run the canary deployment (phase 4) early.
 10. **Teardown only on request.** Never delete a resource group, identity or registry package unless
     the user names it and asks.
+11. **The tier is not negotiable mid-run.** Do not relax a production rule to make progress, do not
+    call a sandbox pass proof for production, and do not run the sandbox path against a
+    subscription that looks like production. A change of tier is a new run from phase 0.
 
 ## State
 
@@ -63,12 +83,16 @@ exists, resume from its `phase` and tell the user where you are.
 Tell the user which phase you are in. Each ends at a gate; do not cross it without the stated
 approval.
 
-### 0. Preflight
+### 0. Preflight and tier
 
 Run `scripts/preflight.sh`. It is read-only: tools, `az` and `gh` login, subscription, your roles
 including those through groups, resource providers, visible policy, existing SRE agents, repository
 visibility. Fix FAIL lines with the user. Treat WARN lines as questions to ask in phase 5.
-Detail: `references/bootstrap.md`.
+
+Then ask the tier question (`references/tiers.md`) and record the answer, with the production
+evidence references or the confirmation that the data is synthetic. Run preflight again with
+`--tier <tier>`, which checks the choice against the subscription's name. Detail:
+`references/bootstrap.md`.
 
 ### 1. Scan
 
@@ -87,6 +111,11 @@ Turn the inventory into `.azure-deploy/plan.md` using `references/resource-selec
 - every code change with its reasoning and evidence;
 - the cost estimate and the ongoing cost of leaving it running;
 - the governance items (an exception to draft, who must approve it);
+- a **rule compliance table**: each rule in `tiers.md` that applies to this design, marked
+  compliant, not applicable, or a departure;
+- for sandbox, a **deviations** section, one entry per departure with what production would need
+  instead; for production, a gap list of every departure or missing template, each with the request
+  or exception that would clear it;
 - the risks, the unknowns, and what you will confirm with a canary deployment.
 
 ### 3. Verify, then approve (gate)
@@ -97,12 +126,20 @@ Fix what it finds and repeat. Then show the user the plan, the verifier's findin
 changed because of them. Do not continue until a human approves; record who, when and a hash of the
 plan in the state file.
 
+By tier: in sandbox the human approves the plan and each deviation (status `approved`). In
+production a plan with any departure cannot be approved; the human approves the compliance table and
+the gap list, and the path stops here unless every element has a compliant template.
+
 ### 4. Apply
+
+In production, do this only for elements that have a compliant template, and stop at the first one
+that does not (`references/tiers.md`, "Production path today").
 
 On a new branch: make the approved code changes, add `infra/azure/` from the templates (compile with
 `bicep build`), run the repository's own tests and build. Then run the **canary**: a minimal
 deployment (the foundation resources plus one small app) into the real subscription to surface
-policy denials early, once the user agrees to the scope. Open a pull request. Detail:
+policy denials early, once the user agrees to the scope. Record each denial against its deviation as
+`denied-by-policy` and redesign it; a denial is not a pass. Open a pull request. Detail:
 `references/landing-zone-bcgov.md`, `references/lessons.md`.
 
 ### 5. Interview and bootstrap (gate)
@@ -137,6 +174,7 @@ Do not retry blindly. Write a short report with the evidence for each check.
 
 Write `infra/azure/README.md` (what exists, how to run and tear down, the bootstrap record), draft
 any decision record the plan called for, list the open items and what costs money while it runs.
+For sandbox, include the deviation register and what each entry needs before production.
 Set `phase` to `handed-off`.
 
 ## When something does not fit
