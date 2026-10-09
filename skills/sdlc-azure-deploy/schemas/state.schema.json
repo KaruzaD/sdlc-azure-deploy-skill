@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Deployment state",
+  "description": "Kept at .azure-deploy/state.json in the target repository and committed. It makes the process resumable and records what was decided and by whom. It never holds a secret.",
+  "type": "object",
+  "required": ["schemaVersion", "phase", "answers"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "phase": {
+      "enum": ["preflight", "scan", "plan", "verify", "approved", "applied", "bootstrapped", "workflow", "deployed", "verified", "handed-off"]
+    },
+    "answers": {
+      "type": "object",
+      "properties": {
+        "subscriptionId": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "location": { "enum": ["canadacentral", "canadaeast"] },
+        "environmentName": { "type": "string", "maxLength": 12 },
+        "bootstrapResourceGroup": { "type": "string" },
+        "identityName": { "type": "string" },
+        "githubRepo": { "type": "string" },
+        "githubEnvironment": { "type": "string" },
+        "imageRegistry": { "enum": ["ghcr-public", "ghcr-private", "acr"] },
+        "trigger": { "enum": ["manual", "push-main", "workflow-run", "tag"] },
+        "sreAgent": {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "enum": ["none", "attach", "create"] },
+            "resourceId": { "type": "string", "description": "For attach." },
+            "runMode": { "enum": ["ReadOnly", "Review", "Autonomous"], "default": "Review" }
+          }
+        },
+        "bootstrapMode": { "enum": ["run-here", "hand-off"], "description": "run-here: the user has the rights. hand-off: someone else runs the roles step." }
+      }
+    },
+    "approvals": {
+      "type": "object",
+      "properties": {
+        "plan": {
+          "type": "object",
+          "required": ["by", "at", "planSha256"],
+          "properties": { "by": { "type": "string" }, "at": { "type": "string", "format": "date-time" }, "planSha256": { "type": "string" } }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "description": "IDs and URLs recorded after they exist.",
+      "additionalProperties": { "type": "string" }
+    },
+    "verifiedFacts": {
+      "type": "array",
+      "description": "Preview-API behaviour confirmed against this tenant, with the date, so it is re-checked when stale.",
+      "items": {
+        "type": "object",
+        "required": ["fact", "checkedAt"],
+        "properties": { "fact": { "type": "string" }, "checkedAt": { "type": "string", "format": "date" } }
+      }
+    },
+    "openItems": { "type": "array", "items": { "type": "string" } }
+  }
+}

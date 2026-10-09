@@ -1,0 +1,5 @@
+{
+  "name": "sdlc-azure-deploy",
+  "description": "Deploy a containerised repository to Azure Container Apps in a BC Gov landing zone, wired to an Azure SRE Agent, with a hardened OIDC GitHub Actions pipeline.",
+  "version": "0.1.0"
+}

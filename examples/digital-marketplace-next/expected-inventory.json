@@ -1,0 +1,96 @@
+{
+  "_note": "The inventory the scanner is expected to produce for this repository at the commit in SOURCE.md, before app/backend/src/telemetry.ts was added (so telemetry.sdk is none and the plan must propose adding it). It is the golden case: a scan that misses an entry, or reports one with no evidence, fails. Line numbers are those of that state.",
+  "repo": {
+    "name": "digital-marketplace-next",
+    "languages": ["typescript"],
+    "packageManagers": ["npm"],
+    "existingCi": [".github/workflows/pages.yml", ".github/workflows/sdlc-checkpoint.yml"]
+  },
+  "services": [
+    {
+      "name": "frontend",
+      "role": "frontend",
+      "dockerfile": "app/frontend/Dockerfile",
+      "buildContext": ".",
+      "ports": [3000],
+      "healthPath": "/status",
+      "reaches": ["backend: reverse proxy for /api, /auth, /admin and /status, address from BACKEND_ORIGIN"],
+      "external": true,
+      "evidence": [{ "file": "app/frontend/Dockerfile", "line": 24 }, { "file": "app/frontend/Caddyfile", "line": 15 }]
+    },
+    {
+      "name": "backend",
+      "role": "backend",
+      "dockerfile": "app/backend/Dockerfile",
+      "buildContext": ".",
+      "ports": [3001],
+      "healthPath": "/status",
+      "external": false,
+      "evidence": [{ "file": "app/backend/Dockerfile", "line": 31 }, { "file": "app/backend/src/status/status.controller.ts", "line": 3 }]
+    },
+    {
+      "name": "migrations",
+      "role": "migration",
+      "dockerfile": "app/migrations/Dockerfile",
+      "buildContext": ".",
+      "ports": [],
+      "healthPath": null,
+      "external": false,
+      "evidence": [{ "file": "app/migrations/Dockerfile", "line": 14 }]
+    },
+    {
+      "name": "idp-realm",
+      "role": "idp",
+      "dockerfile": "app/compose/idp/Dockerfile",
+      "buildContext": ".",
+      "ports": [],
+      "healthPath": null,
+      "external": false,
+      "evidence": [{ "file": "app/compose/idp/Dockerfile", "line": 5 }]
+    }
+  ],
+  "datastores": [
+    {
+      "kind": "postgres",
+      "migrations": "app/migrations/migrations",
+      "seed": "tests/seed",
+      "evidence": [{ "file": "app/migrations/knexfile.cjs", "line": 10 }, { "file": "app/backend/prisma/schema.prisma", "line": 21 }]
+    }
+  ],
+  "config": [
+    { "name": "DATABASE_URL", "service": "backend", "secret": true, "required": true, "dependsOnInfra": true, "evidence": [{ "file": "app/migrations/knexfile.cjs", "line": 10 }] },
+    { "name": "OIDC_ISSUER", "service": "backend", "secret": false, "required": true, "dependsOnInfra": true, "evidence": [{ "file": "app/backend/src/auth/sign-in-flow.ts", "line": 31 }] },
+    { "name": "SMTP_HOST", "service": "backend", "secret": false, "required": false, "dependsOnInfra": true, "evidence": [{ "file": "app/backend/src/mail/settings.ts", "line": 71 }] },
+    { "name": "FILE_UPLOADS_DIR", "service": "backend", "secret": false, "required": false, "dependsOnInfra": false, "evidence": [{ "file": "app/backend/src/files/upload.ts", "line": 26 }] },
+    { "name": "BACKEND_ORIGIN", "service": "frontend", "secret": false, "required": false, "dependsOnInfra": false, "evidence": [{ "file": "app/frontend/Caddyfile", "line": 15 }] }
+  ],
+  "buildTime": [
+    { "name": "VITE_OIDC_URL", "dependsOnInfra": true, "evidence": [{ "file": "app/frontend/Dockerfile", "line": 17 }, { "file": "app/frontend/src/auth/identity-client.ts", "line": 48 }] }
+  ],
+  "persistence": [
+    { "service": "backend", "path": "FILE_UPLOADS_DIR (default under the temp directory)", "evidence": [{ "file": "app/backend/src/files/upload.ts", "line": 26 }] }
+  ],
+  "auth": {
+    "kind": "oidc-keycloak",
+    "needsOwnProvider": true,
+    "evidence": [{ "file": "app/backend/src/auth/token-verifier.ts", "line": 28 }, { "file": "app/compose/idp/Dockerfile", "line": 5 }]
+  },
+  "mail": {
+    "sendsMail": true,
+    "evidence": [{ "file": "app/backend/src/mail/settings.ts", "line": 71 }]
+  },
+  "telemetry": {
+    "sdk": "none",
+    "logFormat": "json-stdout",
+    "evidence": [{ "file": "app/backend/src/main.ts", "line": 1 }]
+  },
+  "governance": {
+    "documents": ["constitution.md", "docs/decisions/"],
+    "deployTargetRule": "P4 sends lower environments to OpenShift unless a decision record documents an exception, recorded under J6",
+    "dataClassification": "synthetic-only"
+  },
+  "unknowns": [
+    "Whether the migrations image should also run the seed",
+    "Whether uploads must survive a restart in a dev and test environment"
+  ]
+}

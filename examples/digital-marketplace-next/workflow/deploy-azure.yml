@@ -1,0 +1,181 @@
+# Deploys the development and test environment on Azure Container Apps (decision record 0069),
+# then attaches it to the SRE agent. Manual for now; it later chains on the build workflow.
+# One-time setup of the Azure identity and GitHub environment: infra/azure/README.md.
+name: Deploy to Azure
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-azure-dev
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  AZURE_LOCATION: canadacentral
+  BICEP_VERSION: v0.48.1
+
+jobs:
+  foundation:
+    name: Foundation
+    runs-on: ubuntu-24.04
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      idp_url: ${{ steps.deploy.outputs.idp_url }}
+      agent_principal_id: ${{ steps.agent.outputs.principal_id }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Find the SRE agent's identity
+        id: agent
+        env:
+          SRE_AGENT_ID: ${{ vars.SRE_AGENT_ID }}
+        run: |
+          set -euo pipefail
+          identity=$(az resource show --ids "$SRE_AGENT_ID" --api-version 2026-01-01 \
+            --query properties.knowledgeGraphConfiguration.identity -o tsv)
+          echo "principal_id=$(az identity show --ids "$identity" --query principalId -o tsv)" >> "$GITHUB_OUTPUT"
+      - name: Deploy everything except the applications
+        id: deploy
+        env:
+          DEPLOY_APPS: "false"
+          AGENT_PRINCIPAL_ID: ${{ steps.agent.outputs.principal_id }}
+          POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+          SDLC_SANDBOX_PASSWORD: ${{ secrets.SDLC_SANDBOX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          az bicep install --version "$BICEP_VERSION"
+          idp_url=$(az deployment sub create --name dmdev-foundation --location "$AZURE_LOCATION" \
+            --parameters infra/azure/main.bicepparam \
+            --query properties.outputs.idpUrl.value -o tsv)
+          echo "idp_url=$idp_url" >> "$GITHUB_OUTPUT"
+
+  images:
+    name: Build and push images
+    needs: foundation
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      registry: ${{ steps.build.outputs.registry }}
+      tag: ${{ steps.build.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and push
+        id: build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IDP_URL: ${{ needs.foundation.outputs.idp_url }}
+        run: |
+          set -euo pipefail
+          registry="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tag="${GITHUB_SHA::12}"
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          build() {
+            local name=$1 dockerfile=$2
+            shift 2
+            docker build -f "$dockerfile" -t "$registry/$name:$tag" \
+              --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" "$@" .
+            docker push "$registry/$name:$tag"
+          }
+          build backend app/backend/Dockerfile
+          build migrations app/migrations/Dockerfile
+          build idp-realm app/compose/idp/Dockerfile
+          build frontend app/frontend/Dockerfile --build-arg "VITE_OIDC_URL=$IDP_URL"
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  apps:
+    name: Deploy applications
+    needs: [foundation, images]
+    runs-on: ubuntu-24.04
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      frontend_url: ${{ steps.deploy.outputs.frontend_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy the applications
+        id: deploy
+        env:
+          DEPLOY_APPS: "true"
+          IMAGE_REGISTRY: ${{ needs.images.outputs.registry }}
+          IMAGE_TAG: ${{ needs.images.outputs.tag }}
+          AGENT_PRINCIPAL_ID: ${{ needs.foundation.outputs.agent_principal_id }}
+          POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+          SDLC_SANDBOX_PASSWORD: ${{ secrets.SDLC_SANDBOX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          az bicep install --version "$BICEP_VERSION"
+          frontend_url=$(az deployment sub create --name dmdev-apps --location "$AZURE_LOCATION" \
+            --parameters infra/azure/main.bicepparam \
+            --query properties.outputs.frontendUrl.value -o tsv)
+          echo "frontend_url=$frontend_url" >> "$GITHUB_OUTPUT"
+      - name: Smoke test
+        env:
+          FRONTEND_URL: ${{ steps.deploy.outputs.frontend_url }}
+          IDP_URL: ${{ needs.foundation.outputs.idp_url }}
+        run: |
+          set -euo pipefail
+          retry=(--fail --silent --show-error --retry 30 --retry-delay 10 --retry-all-errors)
+          curl "${retry[@]}" "$FRONTEND_URL/status" > /dev/null
+          realm="$IDP_URL/realms/digital-marketplace"
+          curl "${retry[@]}" "$realm/.well-known/openid-configuration" \
+            | jq -e --arg issuer "$realm" '.issuer == $issuer' > /dev/null
+
+  agent:
+    name: Attach to the SRE agent
+    needs: apps
+    runs-on: ubuntu-24.04
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Add the resource group to the agent's managed resources
+        env:
+          SRE_AGENT_ID: ${{ vars.SRE_AGENT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          rg_id="/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/rg-dmdev"
+          url="https://management.azure.com${SRE_AGENT_ID}?api-version=2026-01-01"
+          agent=$(az rest --method get --url "$url")
+          # The API rejects a managed-resources change that doesn't name the identity too.
+          body=$(jq -c --arg rg "$rg_id" '
+            .properties.knowledgeGraphConfiguration as $kg
+            | {properties: {knowledgeGraphConfiguration: {
+                identity: $kg.identity,
+                managedResources: ((($kg.managedResources // []) + [$rg]) | unique)}}}' <<< "$agent")
+          if jq -e --arg rg "$rg_id" '.properties.knowledgeGraphConfiguration.managedResources // [] | index($rg)' <<< "$agent" > /dev/null; then
+            echo "Already attached."
+            exit 0
+          fi
+          az rest --method patch --url "$url" --body "$body" --output none
+          for _ in $(seq 1 30); do
+            state=$(az rest --method get --url "$url" --query properties.provisioningState -o tsv)
+            [ "$state" != InProgress ] && break
+            sleep 10
+          done
+          [ "$state" = Succeeded ]

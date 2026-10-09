@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Repository inventory",
+  "description": "What the scanner found, with evidence. Every finding cites where it was seen, so the verifier can check it. Unknowns are listed, never guessed.",
+  "type": "object",
+  "required": ["repo", "services", "datastores", "config", "persistence", "buildTime", "telemetry", "governance", "unknowns"],
+  "$defs": {
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["file", "line"],
+        "properties": { "file": { "type": "string" }, "line": { "type": "integer", "minimum": 1 } }
+      }
+    }
+  },
+  "properties": {
+    "repo": {
+      "type": "object",
+      "required": ["name", "languages", "packageManagers"],
+      "properties": {
+        "name": { "type": "string" },
+        "languages": { "type": "array", "items": { "type": "string" } },
+        "packageManagers": { "type": "array", "items": { "type": "string" } },
+        "existingCi": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "role", "dockerfile", "buildContext", "ports", "evidence"],
+        "properties": {
+          "name": { "type": "string" },
+          "role": { "enum": ["frontend", "backend", "worker", "idp", "migration", "mail", "other"] },
+          "dockerfile": { "type": "string" },
+          "buildContext": { "type": "string" },
+          "ports": { "type": "array", "items": { "type": "integer" } },
+          "healthPath": { "type": ["string", "null"] },
+          "reaches": { "type": "array", "items": { "type": "string" }, "description": "Other services this one calls, and how (for example a reverse proxy to the backend)." },
+          "external": { "type": "boolean", "description": "Must a browser or other outside client reach it?" },
+          "evidence": { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "datastores": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "evidence"],
+        "properties": {
+          "kind": { "enum": ["postgres", "mysql", "sqlserver", "redis", "blob", "other"] },
+          "migrations": { "type": ["string", "null"] },
+          "seed": { "type": ["string", "null"] },
+          "evidence": { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "config": {
+      "type": "array",
+      "description": "Environment variables the services read at run time.",
+      "items": {
+        "type": "object",
+        "required": ["name", "service", "secret", "evidence"],
+        "properties": {
+          "name": { "type": "string" },
+          "service": { "type": "string" },
+          "secret": { "type": "boolean" },
+          "required": { "type": "boolean" },
+          "dependsOnInfra": { "type": "boolean", "description": "Its value comes from a resource this deployment creates." },
+          "evidence": { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "buildTime": {
+      "type": "array",
+      "description": "Values baked in when an image is built. Any that depends on infrastructure forces a two-pass deployment.",
+      "items": {
+        "type": "object",
+        "required": ["name", "dependsOnInfra", "evidence"],
+        "properties": {
+          "name": { "type": "string" },
+          "dependsOnInfra": { "type": "boolean" },
+          "evidence": { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "persistence": {
+      "type": "array",
+      "description": "Paths a service writes that must survive a restart.",
+      "items": {
+        "type": "object",
+        "required": ["service", "path", "evidence"],
+        "properties": {
+          "service": { "type": "string" },
+          "path": { "type": "string" },
+          "evidence": { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "kind": { "enum": ["oidc-keycloak", "oidc-entra", "none", "other"] },
+        "needsOwnProvider": { "type": "boolean", "description": "The environment must run its own identity provider." },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "mail": {
+      "type": "object",
+      "properties": {
+        "sendsMail": { "type": "boolean" },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "required": ["sdk", "logFormat"],
+      "properties": {
+        "sdk": { "enum": ["none", "applicationinsights", "opentelemetry", "other"] },
+        "logFormat": { "enum": ["json-stdout", "text-stdout", "file", "unknown"] },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "description": "The repository's own rules that a deployment may touch.",
+      "properties": {
+        "documents": { "type": "array", "items": { "type": "string" }, "description": "For example a constitution, decision records, CODEOWNERS." },
+        "deployTargetRule": { "type": ["string", "null"], "description": "A rule naming another deploy target, which needs a recorded exception." },
+        "dataClassification": { "enum": ["synthetic-only", "unknown", "real-data"] }
+      }
+    },
+    "unknowns": {
+      "type": "array",
+      "description": "Things the scanner could not determine and a human must answer.",
+      "items": { "type": "string" }
+    }
+  }
+}
